@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+
+package com.mongo.dtp.metadata.api;
+
+message Catalog {
+  string name = 1;
+  string properties = 2;
+  string comment = 3;
+  string connectorType = 4;
+  string age = 5;
+}
+
+message GetCatalogRequest {
+}
+
+message GetCatalogResponse {
+  Catalog catalog = 1;
+}
+
+service CatalogService {
+  rpc GetCatalogs (GetCatalogRequest) returns (GetCatalogResponse){};
+}
+
+////////////////////////////////////////////////
+// The greeting service definition.
+service MyService {
+  // Sends a greeting
+  rpc SayHello (HelloRequest) returns (HelloReply) {
+  }
+}
+
+// The request message containing the user's name.
+message HelloRequest {
+  string name = 1;
+}
+
+// The response message containing the greetings
+message HelloReply {
+  string message = 1;
+}

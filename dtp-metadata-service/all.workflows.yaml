@@ -1,0 +1,135 @@
+# Copyright 2020 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# [START workflows_subworkflow]
+main:
+  steps:
+    - define_assign:
+        assign:
+          - array: [ "foo", "ba", "r" ]
+          - result: ""
+          - i: 0
+    - prepare_http_request:
+        call: http.request
+        args:
+          url: https://httpbin.org/get
+          body:
+            name: simon
+        result: hello
+    - getmoney_http:
+        call: http.request
+        args:
+          url: https://httpbin.org/get
+          body:
+            name: ${hello.code}
+        result: hello
+    - first_call_workflow:
+        call: hello
+        args:
+          input: "Kristof"
+        result: some_output
+    - read_item_try:
+        try:
+          call: http.get
+          args:
+            url: https://httpbin.org/get
+          result: api_response
+        retry:
+          predicate: ${custom_predicate}
+          max_retries: 5
+          backoff:
+            initial_delay: 2
+            max_delay: 60
+            multiplier: 2
+    - saveUserInfo_for:
+        for:
+          value: uid
+          in: ${userIds}
+          steps:
+            - tryStep:
+                try:
+                  steps:
+                    - get:
+                        call: http.get
+                        args:
+                          url: ${"https://example.com/getUserInfo?userId=" +
+                            string(uid)}
+                        result: userInfo
+                    - post:
+                        call: http.post
+                        args:
+                          url: ${"https://example.com/saveUserInfo?userId=" +
+                            string(uid)}
+                          body: ${userInfo}
+                except:
+                  as: e
+                  steps:
+                    - knownErrors:
+                        switch:
+                          - condition: ${not("HttpError" in e.tags)}
+                            return: '${"Connection problem with userID: " + string(uid)}'
+                    - unhandledErrors:
+                        raise: ${e}
+    - profile_parallel:
+        parallel:
+          shared: [ userProfile, recentItems ]  # userProfile and recentItems are shared to make them writable in the branches
+          branches:
+            - getUserProfileBranch:
+                steps:
+                  - getUserProfile:
+                      call: http.get
+                      args:
+                        url: https://httpbin.org/get
+                      #                        url: '${"https://example.com/users/" + input.userId}'
+                      result: userProfile
+            - getRecentItemsBranch:
+                steps:
+                  - getRecentItems:
+                      try:
+                        call: http.get
+                        args:
+                          url: https://httpbin.org/get
+                        #                          url: '${"https://example.com/items?userId=" + input.userId}'
+                        result: recentItems
+                      except:
+                        as: e
+                        steps:
+                          - ignoreError:
+                              assign: # continue with an empty list if this call fails
+                                - recentItems: [ ]
+    - where_to_switch:
+        switch:
+          - condition: ${first_result.body.SomeField < 10}
+            next: small
+          - condition: ${first_result.body.SomeField < 100}
+            next: medium
+        next: large
+    - second_return:
+        return: ${some_output}
+
+hello:
+  params: [ input ]
+  steps:
+    - first:
+        return: ${"Hello "+input}
+
+custom_predicate:
+  params: [ e ]
+  steps:
+    - what_to_repeat:
+        switch:
+          - condition: ${e.code == 500}
+            return: true
+    - otherwise:
+        return: false
